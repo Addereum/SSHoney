@@ -38,7 +38,6 @@ public class SSHHoney {
         cfg.setMaximumPoolSize(5);
         this.ds = new HikariDataSource(cfg);
 
-        // Shared thread pool for shell/exec tasks. Adjustable size.
         this.executor = Executors.newFixedThreadPool(20, r -> {
             Thread t = new Thread(r);
             t.setDaemon(true);
@@ -51,26 +50,18 @@ public class SSHHoney {
         sshd.setPort(port);
         sshd.setKeyPairProvider(Utils.createSimpleHostKeyProvider());
 
-        // Session timeout (Millis)
         sshd.getProperties().put("idle-timeout", String.valueOf(TimeUnit.MINUTES.toMillis(2)));
         sshd.getProperties().put("auth-timeout", String.valueOf(TimeUnit.MINUTES.toMillis(1)));
 
-        // Accept any password and log (sanitized)
-        sshd.setPasswordAuthenticator(new PasswordAuthenticator() {
-            @Override
-            public boolean authenticate(String username, String password, ServerSession session) {
-                logAuthAttempt(session, username, password);
-                return true;
-            }
+        // Because using real authentication logic in a honeypot would be too productive, right?
+        sshd.setPasswordAuthenticator((username, password, session) -> {
+            logAuthAttempt(session, username, password);
+            return true; // LOL sure, everyone's welcome! Here's the red carpet, please hack me.
         });
 
-        // Keyboard-interactive authenticator
         sshd.setKeyboardInteractiveAuthenticator(new KeyboardInteractiveAuthenticator() {
             @Override
-            public InteractiveChallenge generateChallenge(ServerSession session,
-                                                          String username,
-                                                          String lang,
-                                                          String submethods) {
+            public InteractiveChallenge generateChallenge(ServerSession session, String username, String lang, String submethods) {
                 InteractiveChallenge c = new InteractiveChallenge();
                 c.setInteractionName("Password authentication");
                 c.setInteractionInstruction("Please enter your password:");
@@ -86,16 +77,7 @@ public class SSHHoney {
             }
         });
 
-        // CommandFactory - use common executor in the commands
-        sshd.setCommandFactory(new CommandFactory() {
-            @Override
-            public Command createCommand(ChannelSession channel, String command) {
-                return new FakeExecCommand(command, executor);
-            }
-        });
-
-        // Standard Shell / Subsystem: If you want to return a shell as a command, make sure that
-        // the shell command class uses the shared executor (below).
+        sshd.setCommandFactory((channel, command) -> new FakeExecCommand(command, executor));
 
         sshd.start();
         log.info("SSHHoney mock running on port {}", port);
@@ -110,37 +92,36 @@ public class SSHHoney {
                 : -1;
         String banner = session.getClientVersion();
 
-        // sanitize + truncate
-        String su = safe(username, 64);
-        String sp = safe(password, 128);
-        String sb = safe(banner, 200);
+        String u = truncate(username, 64);
+        String p = truncate(password, 128);
+        String b = truncate(banner, 200);
+        // Oh great, we're logging attacker creds like a digital packrat.
+        // Because if you're gonna trap criminals, might as well keep a full scrapbook of their stupidity.
+        String fullText = String.format("USER='%s' PASS='%s' BANNER='%s'", username, password, banner);
 
         log.info("SSH auth attempt from {}:{} user='{}' pass='{}' banner='{}' at {}",
-                client, clientPort, su, sp, sb, ZonedDateTime.now());
+                client, clientPort, u, p, b, ZonedDateTime.now());
 
         try (Connection c = ds.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "INSERT INTO auth_attempts(src_ip, src_port, username, password, client_banner, ts) VALUES (?,?,?,?,?,now())")) {
+                     "INSERT INTO auth_attempts(src_ip, src_port, username, password, client_banner, fulltext, ts) VALUES (?::inet,?,?,?,?,?,now())")) {
             ps.setString(1, client);
             ps.setInt(2, clientPort);
-            ps.setString(3, su);
-            ps.setString(4, sp);
-            ps.setString(5, sb);
+            ps.setString(3, u);
+            ps.setString(4, p);
+            ps.setString(5, b);
+            ps.setString(6, fullText);
             ps.executeUpdate();
         } catch (Exception e) {
             log.debug("DB insert failed: {}", e.toString());
         }
     }
 
-    private static String safe(String s, int maxLen) {
+    private static String truncate(String s, int maxLen) {
         if (s == null) return "";
-        String r = s.replaceAll("[\\r\\n\\x00\\p{Cntrl}]", "?");
-        return r.length() > maxLen ? r.substring(0, maxLen) + "..." : r;
+        return s.length() > maxLen ? s.substring(0, maxLen) + "..." : s;
     }
 
-    /* ------------------ Commands ------------------ */
-
-    // Fake shell command using provided executor
     private static class FakeShellCommand implements Command, CommandLifecycle {
         private final ExecutorService exec;
         private InputStream in;
@@ -161,19 +142,20 @@ public class SSHHoney {
             exec.submit(() -> {
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
                      PrintWriter pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true)) {
+                    // Fake shell implementation: just enough to confuse a script kiddie, not enough to fool a mildly conscious AI.
                     pw.println("Welcome to Ubuntu 20.04.4 LTS (Focal Fossa)");
+                    // Ah yes, because we're roleplaying a 3-year-old Ubuntu box. Next version: honeypot running Windows ME.
                     pw.println("Last login: " + ZonedDateTime.now().minusMinutes(3));
                     pw.print("root@k8s-worker-5:~# ");
                     pw.flush();
                     String line;
                     while ((line = r.readLine()) != null) {
-                        String safe = line.replaceAll("\\p{Cntrl}", "?");
-                        log.info("[SSH SHELL] cmd='{}'", safe);
-                        if (safe.trim().equalsIgnoreCase("exit") || safe.trim().equalsIgnoreCase("logout")) {
+                        log.info("[SSH SHELL] cmd='{}'", line);
+                        if (line.trim().equalsIgnoreCase("exit") || line.trim().equalsIgnoreCase("logout")) {
                             pw.println("logout");
                             break;
                         }
-                        pw.println("bash: " + safe + ": command not found");
+                        pw.println("bash: " + line + ": command not found");
                         pw.print("root@k8s-worker-5:~# ");
                         pw.flush();
                     }
@@ -185,10 +167,10 @@ public class SSHHoney {
             });
         }
 
+        // You know it’s serious when you have a method called `destroy()` that does absolutely f*** all.
         @Override public void destroy(ChannelSession ch) { }
     }
 
-    // Fake exec command uses shared executor
     private static class FakeExecCommand implements Command, CommandLifecycle {
         private final String cmd;
         private final ExecutorService exec;
@@ -206,7 +188,7 @@ public class SSHHoney {
         public void start(ChannelSession ch, Environment env) {
             exec.submit(() -> {
                 try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true)) {
-                    log.info("[SSH EXEC] cmd='{}'", safe(cmd, 200));
+                    log.info("[SSH EXEC] cmd='{}'", cmd);
                     pw.println("bash: " + cmd + ": command not found");
                 } catch (Exception ignored) { }
                 finally { if (cb != null) cb.onExit(127); }

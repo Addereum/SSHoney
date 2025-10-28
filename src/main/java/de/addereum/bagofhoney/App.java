@@ -1,5 +1,9 @@
 package de.addereum.bagofhoney;
 
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.time.ZonedDateTime;
@@ -7,29 +11,53 @@ import java.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class App {
+@Command(
+        name = "bagofhoney",
+        mixinStandardHelpOptions = true,
+        version = "bagofhoney 1.0",
+        description = "Run SSH/TCP/UDP honeypot services"
+)
+public class App implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(App.class);
-
-    // fester Threadpool statt unendlicher Threads
     private static final ExecutorService exec = Executors.newFixedThreadPool(10);
 
-    public static void main(String[] args) throws Exception {
+    @Option(names = {"--no-tcp"}, description = "Disable TCP honeypot")
+    private boolean disableTcp;
+
+    @Option(names = {"--no-udp"}, description = "Disable UDP honeypot")
+    private boolean disableUdp;
+
+    @Option(names = {"--ssh-port"}, description = "SSH honeypot port", defaultValue = "${env:SSH_PORT:-2222}")
+    private int sshPort;
+
+    @Option(names = {"--tcp-port"}, description = "TCP honeypot port", defaultValue = "5000")
+    private int tcpPort;
+
+    @Option(names = {"--udp-port"}, description = "UDP honeypot port", defaultValue = "4000")
+    private int udpPort;
+
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new App()).execute(args);
+        System.exit(exitCode);
+    }
+
+    @Override
+    public void run() {
         System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
 
-        int udpPort = 4000;
-        int tcpPort = 5000;
-        int sshPort = Integer.parseInt(System.getenv().getOrDefault("SSH_PORT", "2222"));
-
-        // SSH
         exec.submit(() -> runSSH(sshPort));
 
-        // UDP
-        exec.submit(() -> runUDP(udpPort));
+        if (!disableUdp) {
+            exec.submit(() -> runUDP(udpPort));
+        }
 
-        // TCP
-        exec.submit(() -> runTCP(tcpPort));
+        if (!disableTcp) {
+            exec.submit(() -> runTCP(tcpPort));
+        }
 
-        Thread.currentThread().join();
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException ignored) {}
     }
 
     private static void runSSH(int sshPort) {
@@ -55,7 +83,7 @@ public class App {
                 ds.receive(p);
                 String s = new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8);
                 log.info("[UDP] {} {}:{} -> {} bytes: {}",
-                        ZonedDateTime.now(), p.getAddress(), p.getPort(), p.getLength(), safe(s));
+                        ZonedDateTime.now(), p.getAddress(), p.getPort(), p.getLength(), truncate(s, 200));
                 byte[] reply = ("OK " + System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8);
                 ds.send(new DatagramPacket(reply, reply.length, p.getAddress(), p.getPort()));
             }
@@ -85,16 +113,15 @@ public class App {
             int read = s.getInputStream().read(buf);
             String payload = read > 0 ? new String(buf, 0, read, StandardCharsets.UTF_8) : "";
             log.info("[TCP] {} {}:{} -> {} bytes: {}",
-                    ZonedDateTime.now(), addr, port, read, safe(payload));
+                    ZonedDateTime.now(), addr, port, read, truncate(payload, 200));
             s.getOutputStream().write("HELLO\n".getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             log.debug("TCP connection error: {}", e.toString());
         }
     }
 
-    private static String safe(String in) {
+    private static String truncate(String in, int maxLen) {
         if (in == null) return "";
-        String s = in.replaceAll("[\\r\\n\\x00\\p{Cntrl}]", "?");
-        return s.length() > 200 ? s.substring(0, 200) + "..." : s;
+        return in.length() > maxLen ? in.substring(0, maxLen) + "..." : in;
     }
 }
