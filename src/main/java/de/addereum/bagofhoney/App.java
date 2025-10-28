@@ -1,5 +1,3 @@
-// App.java now with Picocli support to enable/disable TCP/UDP honeypots
-
 package de.addereum.bagofhoney;
 
 import picocli.CommandLine;
