@@ -8,6 +8,9 @@ dependency-reduced-pom.xml
 .vscode/
 *.class
 
+# hostkey
+data/hostkey.ser
+
 # OS
 .DS_Store
 Thumbs.db
