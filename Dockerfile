@@ -1,22 +1,31 @@
-# Bauzeit-Image (Maven) optional, wenn du im Container bauen willst.
+# ---------- Build stage ----------
 FROM eclipse-temurin:21 AS build
 WORKDIR /workspace
-COPY pom.xml mvnw ./
-COPY .mvn .mvn
-# nur wenn du das Projekt inside Docker bauen willst; sonst entferne diesen Schritt.
-RUN ["bash", "-lc", "mvn -q -DskipTests package"]
 
-# Laufzeit-Image
+COPY pom.xml ./
+
+# sourcecode
+COPY src src
+
+RUN bash -lc "mvn -q -DskipTests package"
+
+# ---------- Runtime stage ----------
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# Kopiere Ergebnis des Builds (erwartet: target/bagofhoney-1.0-SNAPSHOT.jar)
+RUN mkdir -p /data && chmod 700 /data
+
+# Non-root-User anlegen
+RUN useradd -r -s /bin/false honey
+RUN chown honey:honey /data
+
+USER honey
+
 COPY target/bagofhoney-1.0-SNAPSHOT.jar /app/app.jar
-# falls du kein fat-jar baust, kannst du statt dessen alle dependency-jars in ein libs-Dir kopieren
-# COPY target/dependency /app/libs
 
-EXPOSE 2222/tcp 4000/udp
-
+EXPOSE 2222/tcp 4000/udp 5000/tcp
 ENV JAVA_OPTS=""
 
 ENTRYPOINT ["sh","-c","exec java $JAVA_OPTS -jar /app/app.jar"]
+
+
