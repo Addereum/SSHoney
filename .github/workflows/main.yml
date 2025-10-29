@@ -28,10 +28,10 @@ jobs:
       - name: Build shaded JAR
         run: mvn -q -DskipTests package
 
-      - name: Locate shaded jar
+      - name: Locate built jar
         id: jar
         run: |
-          FILE=$(ls target/*-shaded.jar | head -n 1)
+          FILE=$(ls target/*.jar | head -n 1)
           echo "file=$FILE" >> $GITHUB_OUTPUT
 
       - name: Create or update 'latest' release
