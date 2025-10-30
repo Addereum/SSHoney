@@ -25,15 +25,15 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build shaded JAR
-        run: mvn -q -DskipTests package
+      - name: Build JAR
+        run: mvn -DskipTests package
 
-      - name: Locate shaded jar
+      - name: Locate jar
         id: jar
         run: |
-          FILE=$(ls target/*-shaded.jar | head -n 1)
+          FILE=$(ls target/*.jar | head -n 1)
           if [ -z "$FILE" ]; then
-            echo "No shaded jar found!" >&2
+            echo "No jar found!" >&2
             exit 1
           fi
           echo "file=$FILE" >> $GITHUB_OUTPUT
@@ -51,6 +51,6 @@ jobs:
 
             Includes all recent fixes and enhancements.
           files: |
-            ${{ steps.jar.outputs.file }}#bagofhoney-shaded-latest.jar
+            ${{ steps.jar.outputs.file }}#bagofhoney-latest.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
