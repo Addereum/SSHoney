@@ -37,6 +37,7 @@ jobs:
             exit 1
           fi
           echo "file=$FILE" >> $GITHUB_OUTPUT
+          echo "Located: $FILE"
 
       - name: Create or update 'latest' release
         uses: softprops/action-gh-release@v2
@@ -51,6 +52,6 @@ jobs:
 
             Includes all recent fixes and enhancements.
           files: |
-            ${{ steps.jar.outputs.file }}#bagofhoney-shaded-latest.jar
+            ${{ steps.jar.outputs.file }}#bagofhoney-latest.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
