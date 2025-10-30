@@ -24,6 +24,8 @@
             <phase>package</phase>
             <goals><goal>shade</goal></goals>
             <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>shaded</shadedClassifierName>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>de.addereum.bagofhoney.App</mainClass>
