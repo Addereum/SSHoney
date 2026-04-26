@@ -38,8 +38,8 @@ jobs:
             echo "No shaded jar found!" >&2
             exit 1
           fi
-          echo "file=$FILE" >> $GITHUB_OUTPUT
-          echo "Located shaded JAR: $FILE"
+          cp "$FILE" bagofhoney-latest.jar
+          echo "Copied $FILE to bagofhoney-latest.jar"
 
       - name: Lowercase repository owner
         run: echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
@@ -60,11 +60,11 @@ jobs:
             ghcr.io/${{ env.REPO_OWNER }}/bagofhoney:latest
             ghcr.io/${{ env.REPO_OWNER }}/bagofhoney:${{ github.sha }}
 
-      - name: Create or update 'latest' release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "BagOfHoney (latest)"
+          tag_name: "build-${{ github.run_number }}"
+          name: "BagOfHoney Build #${{ github.run_number }}"
           generate_release_notes: true
           body: |
             🐝 **Automated release build**
@@ -73,7 +73,6 @@ jobs:
             Triggered by: ${{ github.actor }}
 
             Includes all recent fixes and enhancements.
-          files: |
-            ${{ steps.jar.outputs.file }}#bagofhoney-latest.jar
+          files: bagofhoney-latest.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
