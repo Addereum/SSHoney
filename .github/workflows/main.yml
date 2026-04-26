@@ -66,13 +66,6 @@ jobs:
           tag_name: "build-${{ github.run_number }}"
           name: "BagOfHoney Build #${{ github.run_number }}"
           generate_release_notes: true
-          body: |
-            🐝 **Automated release build**
-
-            Commit: ${{ github.sha }}
-            Triggered by: ${{ github.actor }}
-
-            Includes all recent fixes and enhancements.
           files: bagofhoney-latest.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
