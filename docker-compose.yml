@@ -54,5 +54,16 @@ services:
       interval: 10s
       retries: 5
 
+  adminer:
+    image: adminer:latest
+    container_name: bagofhoney-panel
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+
 volumes:
   db_data:
