@@ -148,19 +148,67 @@ public class SSHHoney {
                     pw.print("root@k8s-worker-5:~# ");
                     pw.flush();
                     StringBuilder sb = new StringBuilder();
+                    List<String> history = new java.util.ArrayList<>();
+                    int historyIndex = 0;
                     int c;
                     while ((c = in.read()) != -1) {
+                        if (c == 27) { // ESC sequence (e.g. arrow keys)
+                            int next1 = in.read();
+                            if (next1 == '[') {
+                                int next2 = in.read();
+                                if (next2 == 'A') { // Up arrow
+                                    if (historyIndex > 0) {
+                                        historyIndex--;
+                                        String histCmd = history.get(historyIndex);
+                                        pw.print("\033[2K\rroot@k8s-worker-5:~# " + histCmd);
+                                        pw.flush();
+                                        sb.setLength(0);
+                                        sb.append(histCmd);
+                                    }
+                                } else if (next2 == 'B') { // Down arrow
+                                    if (historyIndex < history.size() - 1) {
+                                        historyIndex++;
+                                        String histCmd = history.get(historyIndex);
+                                        pw.print("\033[2K\rroot@k8s-worker-5:~# " + histCmd);
+                                        pw.flush();
+                                        sb.setLength(0);
+                                        sb.append(histCmd);
+                                    } else if (historyIndex == history.size() - 1 || historyIndex == history.size()) {
+                                        historyIndex = history.size();
+                                        pw.print("\033[2K\rroot@k8s-worker-5:~# ");
+                                        pw.flush();
+                                        sb.setLength(0);
+                                    }
+                                } // (ignore left/right for simplicity)
+                            }
+                            continue;
+                        }
+
                         if (c == '\r' || c == '\n') {
                             pw.print("\r\n");
                             pw.flush();
                             String line = sb.toString();
                             sb.setLength(0);
+
+                            if (!line.trim().isEmpty()) {
+                                history.add(line);
+                                historyIndex = history.size();
+                            }
+
                             log.info("[SSH SHELL] cmd='{}'", line);
                             if (line.trim().equalsIgnoreCase("exit") || line.trim().equalsIgnoreCase("logout")) {
                                 pw.print("logout\r\n");
                                 break;
                             }
-                            writeFakeResponse(pw, line);
+
+                            if (line.trim().equals("history")) {
+                                for (int i = 0; i < history.size(); i++) {
+                                    pw.print(String.format(" %4d  %s\r\n", i + 1, history.get(i)));
+                                }
+                            } else {
+                                writeFakeResponse(pw, line);
+                            }
+
                             pw.print("root@k8s-worker-5:~# ");
                             pw.flush();
                         } else if (c == 127 || c == '\b') {
@@ -173,6 +221,7 @@ public class SSHHoney {
                             pw.print("^C\r\nroot@k8s-worker-5:~# ");
                             pw.flush();
                             sb.setLength(0);
+                            historyIndex = history.size();
                         } else if (c == 4) {
                             pw.print("logout\r\n");
                             break;
