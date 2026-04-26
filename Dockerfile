@@ -1,5 +1,5 @@
 # ---------- Build stage ----------
-FROM eclipse-temurin:21 AS build
+FROM maven:3-eclipse-temurin-21 AS build
 WORKDIR /workspace
 
 COPY pom.xml ./
