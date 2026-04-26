@@ -141,24 +141,46 @@ public class SSHHoney {
         @Override
         public void start(ChannelSession ch, Environment env) {
             exec.submit(() -> {
-                try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-                     PrintWriter pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true)) {
-                    // Fake shell implementation: just enough to confuse a script kiddie, not enough to fool a mildly conscious AI.
-                    pw.println("Welcome to Ubuntu 20.04.4 LTS (Focal Fossa)");
-                    // Ah yes, because we're roleplaying a 3-year-old Ubuntu box. Next version: honeypot running Windows ME.
-                    pw.println("Last login: " + ZonedDateTime.now().minusMinutes(3));
+                try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true)) {
+                    // Fake shell implementation: just enough to confuse a script kiddie
+                    pw.print("Welcome to Ubuntu 20.04.4 LTS (Focal Fossa)\r\n");
+                    pw.print("Last login: " + ZonedDateTime.now().minusMinutes(3) + "\r\n");
                     pw.print("root@k8s-worker-5:~# ");
                     pw.flush();
-                    String line;
-                    while ((line = r.readLine()) != null) {
-                        log.info("[SSH SHELL] cmd='{}'", line);
-                        if (line.trim().equalsIgnoreCase("exit") || line.trim().equalsIgnoreCase("logout")) {
-                            pw.println("logout");
+                    StringBuilder sb = new StringBuilder();
+                    int c;
+                    while ((c = in.read()) != -1) {
+                        if (c == '\r' || c == '\n') {
+                            pw.print("\r\n");
+                            pw.flush();
+                            String line = sb.toString();
+                            sb.setLength(0);
+                            log.info("[SSH SHELL] cmd='{}'", line);
+                            if (line.trim().equalsIgnoreCase("exit") || line.trim().equalsIgnoreCase("logout")) {
+                                pw.print("logout\r\n");
+                                break;
+                            }
+                            writeFakeResponse(pw, line);
+                            pw.print("root@k8s-worker-5:~# ");
+                            pw.flush();
+                        } else if (c == 127 || c == '\b') {
+                            if (sb.length() > 0) {
+                                sb.setLength(sb.length() - 1);
+                                pw.print("\b \b");
+                                pw.flush();
+                            }
+                        } else if (c == 3) {
+                            pw.print("^C\r\nroot@k8s-worker-5:~# ");
+                            pw.flush();
+                            sb.setLength(0);
+                        } else if (c == 4) {
+                            pw.print("logout\r\n");
                             break;
+                        } else if (c >= 32 && c <= 126) {
+                            sb.append((char) c);
+                            pw.print((char) c);
+                            pw.flush();
                         }
-                        writeFakeResponse(pw, line);
-                        pw.print("root@k8s-worker-5:~# ");
-                        pw.flush();
                     }
                 } catch (Exception e) {
                     log.debug("shell IO end: {}", e.toString());
@@ -202,13 +224,13 @@ public class SSHHoney {
     private static void writeFakeResponse(PrintWriter pw, String line) {
         String tLine = line.trim();
         if (tLine.isEmpty()) return;
-        if (tLine.equals("whoami")) pw.println("root");
-        else if (tLine.equals("id")) pw.println("uid=0(root) gid=0(root) groups=0(root)");
-        else if (tLine.equals("pwd")) pw.println("/root");
-        else if (tLine.equals("uname -a") || tLine.equals("uname")) pw.println("Linux k8s-worker-5 5.4.0-104-generic #118-Ubuntu SMP Wed Mar 2 19:02:41 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux");
-        else if (tLine.startsWith("ls")) pw.println("snap  scripts  README.txt");
-        else if (tLine.startsWith("echo ")) pw.println(tLine.substring(5));
-        else pw.println("bash: " + tLine.split(" ")[0] + ": command not found");
+        if (tLine.equals("whoami")) pw.print("root\r\n");
+        else if (tLine.equals("id")) pw.print("uid=0(root) gid=0(root) groups=0(root)\r\n");
+        else if (tLine.equals("pwd")) pw.print("/root\r\n");
+        else if (tLine.equals("uname -a") || tLine.equals("uname")) pw.print("Linux k8s-worker-5 5.4.0-104-generic #118-Ubuntu SMP Wed Mar 2 19:02:41 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux\r\n");
+        else if (tLine.startsWith("ls")) pw.print("snap  scripts  README.txt\r\n");
+        else if (tLine.startsWith("echo ")) pw.print(tLine.substring(5) + "\r\n");
+        else pw.print("bash: " + tLine.split(" ")[0] + ": command not found\r\n");
     }
 
     public void stop() {
