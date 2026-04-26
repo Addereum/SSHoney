@@ -78,6 +78,7 @@ public class SSHHoney {
         });
 
         sshd.setCommandFactory((channel, command) -> new FakeExecCommand(command, executor));
+        sshd.setShellFactory(channel -> new FakeShellCommand(executor));
 
         sshd.start();
         log.info("SSHHoney mock running on port {}", port);
