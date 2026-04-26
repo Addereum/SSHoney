@@ -13,6 +13,10 @@ RUN bash -lc "mvn -q -DskipTests package"
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+LABEL org.opencontainers.image.source="https://github.com/addereum/SSHoney"
+LABEL org.opencontainers.image.description="Bag of Honey: Lightweight multi-protocol honeypot"
+LABEL org.opencontainers.image.licenses="MIT"
+
 RUN mkdir -p /data && chmod 700 /data
 
 # Non-root-User anlegen
@@ -21,7 +25,7 @@ RUN chown honey:honey /data
 
 USER honey
 
-COPY target/bagofhoney-1.0-SNAPSHOT.jar /app/app.jar
+COPY --from=build /workspace/target/bagofhoney-1.0-SNAPSHOT-shaded.jar /app/app.jar
 
 EXPOSE 2222/tcp 4000/udp 5000/tcp
 ENV JAVA_OPTS=""

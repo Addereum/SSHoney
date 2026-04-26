@@ -155,7 +155,7 @@ public class SSHHoney {
                             pw.println("logout");
                             break;
                         }
-                        pw.println("bash: " + line + ": command not found");
+                        writeFakeResponse(pw, line);
                         pw.print("root@k8s-worker-5:~# ");
                         pw.flush();
                     }
@@ -189,13 +189,25 @@ public class SSHHoney {
             exec.submit(() -> {
                 try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8), true)) {
                     log.info("[SSH EXEC] cmd='{}'", cmd);
-                    pw.println("bash: " + cmd + ": command not found");
+                    writeFakeResponse(pw, cmd);
                 } catch (Exception ignored) { }
                 finally { if (cb != null) cb.onExit(127); }
             });
         }
 
         @Override public void destroy(ChannelSession ch) { }
+    }
+
+    private static void writeFakeResponse(PrintWriter pw, String line) {
+        String tLine = line.trim();
+        if (tLine.isEmpty()) return;
+        if (tLine.equals("whoami")) pw.println("root");
+        else if (tLine.equals("id")) pw.println("uid=0(root) gid=0(root) groups=0(root)");
+        else if (tLine.equals("pwd")) pw.println("/root");
+        else if (tLine.equals("uname -a") || tLine.equals("uname")) pw.println("Linux k8s-worker-5 5.4.0-104-generic #118-Ubuntu SMP Wed Mar 2 19:02:41 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux");
+        else if (tLine.startsWith("ls")) pw.println("snap  scripts  README.txt");
+        else if (tLine.startsWith("echo ")) pw.println(tLine.substring(5));
+        else pw.println("bash: " + tLine.split(" ")[0] + ": command not found");
     }
 
     public void stop() {
