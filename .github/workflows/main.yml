@@ -66,4 +66,10 @@ jobs:
         run: |
           gh release create "build-${{ github.run_number }}" bagofhoney-latest.jar \
             --title "BagOfHoney Build #${{ github.run_number }}" \
+            --notes "🐝 **Automated release build**
+          
+          Commit: ${{ github.sha }}
+          Triggered by: ${{ github.actor }}
+          
+          Includes all recent fixes and enhancements." \
             --generate-notes
